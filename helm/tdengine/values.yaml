@@ -2,7 +2,7 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into helm templates.
 
-replicaCount: 1
+replicaCount: 3
 
 image:
   prefix: tdengine/tdengine
@@ -14,6 +14,9 @@ service:
   # ClusterIP is the default service type, use NodeIP only if you know what you are doing.
   type: ClusterIP
   ports:
+    # engine:6030,6042
+    # adapter:6041 statsd:6044 collectd:6045 opentsdb_telnet:6046,6047,6048,6049
+    # keeper:6043
     # TCP range required
     tcp: [6030, 6041, 6042, 6043, 6044, 6046, 6047, 6048, 6049, 6060]
     # UDP range
@@ -28,23 +31,32 @@ resources:
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+  limits:
+    cpu: "16"
+    memory: 32Gi
+  requests:
+    cpu: 100m
+    memory: 128Mi
 
 storage:
   # Set storageClassName for pvc. K8s use default storage class if not set.
   #
   className: ""
-  dataSize: "100Gi"
-  logSize: "10Gi"
+  dataSize: "500Gi"
+  logSize: "50Gi"
 
 nodeSelectors:
   taosd:
-    # node selectors
+    tdengine: ""
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app: taosd
+          topologyKey: kubernetes.io/hostname
+        weight: 100
 
 clusterDomainSuffix: ""
 # Config settings in taos.cfg file.
@@ -68,8 +80,16 @@ taoscfg:
   #   1: pods will start as TDengine server cluster. [default]
   CLUSTER: "1"
 
+  TAOS_CRASH_REPORTING: "0"
+  TAOS_DISABLE_ADAPTER: "0"
+  TAOS_ENABLE_COREFILE: "0"
+  TAOS_KEEP_COLUMN_NAME: "1"
+  TAOS_NUM_OF_COMMIT_THREADS: "8" # 设置写入线程的最大数量/CPU 核数的 0.5 倍
+  TAOS_SHELL_ACTIVITY_TIMER: "120"
+  TAOS_SUPPORT_VNODES: "32" # dnode 支持的最大 vnode 数目/CPU 核数的 2 倍
+  TAOS_TELEMETRY_REPORTING: "0"
   # number of replications, for cluster only
-  TAOS_REPLICA: "1"
+  #TAOS_REPLICA: "1"
 
 
   #

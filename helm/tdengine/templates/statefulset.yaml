@@ -6,9 +6,9 @@ metadata:
     {{- include "tdengine.labels" . | nindent 4 }}
     app: taosd
 spec:
-  serviceName: {{ include "tdengine.fullname" . }}
+  serviceName: {{ include "tdengine.fullname" . }}-headless
   replicas: {{ .Values.replicaCount }}
-  # podManagementPolicy: Parallel
+  podManagementPolicy: Parallel
   selector:
     matchLabels:
       {{- include "tdengine.selectorLabels" . | nindent 6 }}
@@ -33,6 +33,10 @@ spec:
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
+          command:
+            - sh
+            - -ce
+            - echo IyEvYmluL3NoCgpzZXQgLWUKCnVudGlsIGN1cmwgLXYgIiQoaG9zdG5hbWUgLWYpIiAyPiYxIHwgZ3JlcCAiJChob3N0bmFtZSAtaSlcLiI7IGRvIHNsZWVwIDE7IGRvbmUKCkJBU0U2NHRhb3NrZWVwZXI9JCgKICBjYXQgPDxcRU9GIHwgYmFzZTY0IC13MAppZiAhIHBzIC1lZiB8IGF3ayAne2lmKCRORn4vXnRhb3NrZWVwZXIvKXByaW50ICRORn0nIHwgZ3JlcCBedGFvc2tlZXBlcjsgdGhlbgogIG5vaHVwIHRhb3NrZWVwZXIgPi92YXIvbG9nL3Rhb3MvdGFvc2tlZXBlci5sb2cgMj4vdmFyL2xvZy90YW9zL3Rhb3NrZWVwZXIuZXJyICYKZmkKRU9GCikKCmZvciBmIGluIC91c3IvYmluL3Rhb3MtY2hlY2sgL3Vzci9iaW4vZW50cnlwb2ludC5zaDsgZG8KICBpZiB0ZXN0IC1mICRmICYmICEgZ3JlcCAnZ3JlcCBcXlxbMC05XF06JyAkZiA+L2Rldi9udWxsIDI+JjE7IHRoZW4KICAgIGlmIHRlc3QgJHtmIyMqL30gPSB0YW9zLWNoZWNrOyB0aGVuCiAgICAgIHNlZCAtaSAic34tLWNoZWNrfi0tY2hlY2sgfCBncmVwIF5bMC05XTp+ZzsvZXhpdCAwL2lcICBlY2hvICRCQVNFNjR0YW9za2VlcGVyfGJhc2U2NCAtZHxzaCAtcyIgJGYKICAgIGVsc2UKICAgICAgc2VkIC1pICJzfi0tY2hlY2t+LS1jaGVjayB8IGdyZXAgXlswLTldOn5nIiAkZgogICAgZmkKICBmaQpkb25lCgpleHBvcnQgXAogIFRBT1NfQ1JBU0hfUkVQT1JUSU5HPTAgXAogIFRBT1NfRU5BQkxFX0NPUkVGSUxFPTAgXAogIFRBT1NfVEVMRU1FVFJZX1JFUE9SVElORz0wIFwKICBHSU5fTU9ERT1yZWxlYXNlCmV4ZWMgL3RpbmkgLXd2IC0tIGVudHJ5cG9pbnQuc2ggdGFvc2QK|base64 -d|sh
           image: "{{ .Values.image.prefix }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports: {{ range $idx, $val := .Values.service.ports.tcp }}
@@ -54,7 +58,7 @@ spec:
                 fieldPath: metadata.name
           # SERVICE_NAME and NAMESPACE for fqdn resolve
           - name: SERVICE_NAME
-            value: {{ include "tdengine.fullname" . }}
+            value: {{ include "tdengine.fullname" . }}-headless
           - name: STS_NAME
             value: {{ include "tdengine.fullname" . }}
           - name: STS_NAMESPACE
@@ -70,10 +74,16 @@ spec:
           # Must set if you want a cluster.
           - name: TAOS_FIRST_EP
             value: '$(STS_NAME)-0.$(SERVICE_NAME).$(STS_NAMESPACE).svc.{{ .Values.clusterDomainSuffix | default "cluster.local" }}:$(TAOS_SERVER_PORT)'
+          - name: TAOS_SECOND_EP
+            value: '$(STS_NAME)-1.$(SERVICE_NAME).$(STS_NAMESPACE).svc.{{ .Values.clusterDomainSuffix | default "cluster.local" }}:$(TAOS_SERVER_PORT)'
           # TAOS_FQND should always be setted in k8s env.
           - name: TAOS_FQDN
             value: '$(POD_NAME).$(SERVICE_NAME).$(STS_NAMESPACE).svc.{{ .Values.clusterDomainSuffix | default "cluster.local" }}'
 
+          - name: TAOS_TEMP_DIR
+            value: /var/log/taos/
+          - name: TAOS_MONITOR_FQDN
+            value: localhost
           envFrom:
           - configMapRef:
               name: {{ include "tdengine.fullname" . }}-taoscfg
@@ -87,12 +97,13 @@ spec:
               command:
               - taos-check
             initialDelaySeconds: 5
-            timeoutSeconds: 5000
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command:
               - taos-check
             initialDelaySeconds: 15
+            timeoutSeconds: 5
             periodSeconds: 20
           securityContext:
             # privileged: true
